@@ -2,7 +2,7 @@ workflows:
   neonkus-android:
     name: Neon Kuş - Android Build
     max_build_duration: 30
-    instance_type: linux
+    instance_type: mac_mini_m2
     environment:
       node: 20
       groups:
