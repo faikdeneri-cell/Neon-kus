@@ -1,0 +1,15 @@
+{
+  "name": "neon-kus",
+  "version": "1.0.0",
+  "description": "Neon Kuş - flappy tarzı mobil oyun",
+  "scripts": {
+    "sync": "npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/android": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}
