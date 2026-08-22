@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Neon Kuş</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+  html,body { height:100%; overflow:hidden; background:#05030f; font-family:'Segoe UI', system-ui, sans-serif; }
+  #wrap { position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; }
+  canvas { display:block; touch-action:none; box-shadow:0 0 60px rgba(120,60,255,0.25); }
+  #overlay {
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#f5f0ff; text-align:center; pointer-events:none; z-index:5;
+  }
+  #overlay.hidden { display:none; }
+  #title {
+    font-size:clamp(28px,8vw,46px); font-weight:800; letter-spacing:1px;
+    background:linear-gradient(90deg,#ff5fd8,#7c5cff,#5cd8ff);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 0 18px rgba(150,90,255,0.6));
+    margin-bottom:8px;
+  }
+  #sub { font-size:15px; opacity:0.75; margin-bottom:26px; letter-spacing:0.5px; }
+  #tapBtn {
+    pointer-events:auto; padding:14px 34px; font-size:17px; font-weight:700; color:#05030f;
+    background:linear-gradient(90deg,#5cd8ff,#7c5cff); border:none; border-radius:999px; cursor:pointer;
+    box-shadow:0 0 24px rgba(120,90,255,0.6);
+  }
+  #scoreRow { position:absolute; top:22px; left:0; right:0; text-align:center; z-index:4; pointer-events:none; }
+  #score { font-size:44px; font-weight:800; color:#fff; text-shadow:0 0 16px rgba(120,90,255,0.9),0 2px 4px rgba(0,0,0,0.5); }
+  #best { font-size:13px; color:#b9a9ff; margin-top:2px; letter-spacing:1px; }
+  #gameover { pointer-events:auto; }
+  #gameover #tapBtn { margin-top:10px; }
+  .stat { font-size:15px; margin:4px 0; color:#d8ccff; }
+  .stat b { color:#fff; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div id="scoreRow"><div id="score">0</div><div id="best">EN İYİ: 0</div></div>
+  <div id="overlay">
+    <div id="title">NEON KUŞ</div>
+    <div id="sub">Ekrana dokun, engellerden kaç, puan topla</div>
+    <button id="tapBtn">BAŞLA</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const tapBtn = document.getElementById('tapBtn');
+  const titleEl = document.getElementById('title');
+  const subEl = document.getElementById('sub');
+
+  let W, H, DPR;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    const maxW = Math.min(window.innerWidth, 480);
+    const maxH = window.innerHeight;
+    W = maxW; H = maxH;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---- Persistent best score ----
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('neonkus_best') || '0', 10) || 0; } catch(e) { best = 0; }
+  bestEl.textContent = 'EN İYİ: ' + best;
+
+  // ---- Background stars ----
+  let stars = [];
+  function initStars(){
+    stars = [];
+    for(let i=0;i<60;i++){
+      stars.push({x:Math.random()*W, y:Math.random()*H*0.7, r:Math.random()*1.6+0.4, s:Math.random()*0.3+0.05, a:Math.random()*0.6+0.3});
+    }
+  }
+  initStars();
+
+  // ---- Game state ----
+  const GRAVITY = 1500;
+  const FLAP_V = -420;
+  const PIPE_GAP = 190;
+  const PIPE_W = 64;
+  const PIPE_SPEED = 150;
+  const GROUND_H = 70;
+
+  let bird, pipes, score, state, elapsed, spawnTimer, particles;
+
+  function reset(){
+    bird = { x: W*0.3, y: H*0.4, vy: 0, r: 15, rot:0, trail: [] };
+    pipes = [];
+    particles = [];
+    score = 0;
+    elapsed = 0;
+    spawnTimer = 0;
+    state = 'ready'; // ready, playing, dead
+    scoreEl.textContent = '0';
+  }
+  reset();
+
+  function spawnPipe(){
+    const margin = 60;
+    const gapY = margin + Math.random()*(H - GROUND_H - margin*2 - PIPE_GAP);
+    pipes.push({ x: W + PIPE_W, gapY: gapY, passed:false, hue: 260 + Math.random()*80 });
+  }
+
+  function flap(){
+    if(state === 'ready'){
+      state = 'playing';
+      overlay.classList.add('hidden');
+    }
+    if(state === 'dead') return;
+    bird.vy = FLAP_V;
+    for(let i=0;i<6;i++){
+      particles.push({x:bird.x-8, y:bird.y+Math.random()*6-3, vx:-Math.random()*90-40, vy:(Math.random()-0.5)*60, life:0.5, r:Math.random()*3+1});
+    }
+  }
+
+  function die(){
+    if(state === 'dead') return;
+    state = 'dead';
+    if(score > best){
+      best = score;
+      try { localStorage.setItem('neonkus_best', String(best)); } catch(e){}
+    }
+    bestEl.textContent = 'EN İYİ: ' + best;
+    titleEl.textContent = 'YİNE Mİ?';
+    subEl.innerHTML = 'Skor: <b>'+score+'</b> &nbsp;|&nbsp; En iyi: <b>'+best+'</b>';
+    tapBtn.textContent = 'TEKRAR OYNA';
+    overlay.classList.remove('hidden');
+  }
+
+  tapBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    reset();
+    overlay.classList.add('hidden');
+    state = 'playing';
+  });
+
+  window.addEventListener('pointerdown', (e)=>{
+    if(e.target === tapBtn) return;
+    flap();
+  });
+  window.addEventListener('keydown', (e)=>{
+    if(e.code === 'Space'){ flap(); }
+  });
+
+  let last = performance.now();
+  function loop(now){
+    let dt = (now - last)/1000;
+    if(dt > 0.05) dt = 0.05;
+    last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt){
+    for(const s of stars){
+      s.x -= s.s * 20 * dt;
+      if(s.x < -2) s.x = W+2;
+    }
+    for(let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      p.x += p.vx*dt; p.y += p.vy*dt; p.life -= dt;
+      if(p.life<=0) particles.splice(i,1);
+    }
+
+    if(state !== 'playing') return;
+    elapsed += dt;
+
+    bird.vy += GRAVITY*dt;
+    bird.y += bird.vy*dt;
+    bird.rot = Math.max(-0.5, Math.min(1.3, bird.vy/500));
+
+    bird.trail.push({x:bird.x, y:bird.y});
+    if(bird.trail.length > 10) bird.trail.shift();
+
+    spawnTimer -= dt;
+    if(spawnTimer <= 0){
+      spawnPipe();
+      spawnTimer = 1.5;
+    }
+
+    for(const p of pipes){
+      p.x -= PIPE_SPEED*dt;
+      if(!p.passed && p.x + PIPE_W < bird.x){
+        p.passed = true;
+        score++;
+        scoreEl.textContent = String(score);
+      }
+    }
+    pipes = pipes.filter(p => p.x > -PIPE_W - 5);
+
+    // collisions
+    if(bird.y + bird.r > H - GROUND_H || bird.y - bird.r < 0){
+      die();
+    }
+    for(const p of pipes){
+      if(bird.x + bird.r > p.x && bird.x - bird.r < p.x + PIPE_W){
+        if(bird.y - bird.r < p.gapY || bird.y + bird.r > p.gapY + PIPE_GAP){
+          die();
+        }
+      }
+    }
+  }
+
+  function drawBackground(){
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#0a0620');
+    g.addColorStop(0.6,'#180a35');
+    g.addColorStop(1,'#2a0f45');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+    for(const s of stars){
+      ctx.globalAlpha = s.a;
+      ctx.fillStyle = '#cfe0ff';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // distant skyline silhouette
+    ctx.fillStyle = 'rgba(20,10,40,0.8)';
+    const baseY = H - GROUND_H;
+    ctx.beginPath();
+    ctx.moveTo(0, baseY);
+    let bx = 0;
+    let seed = 0;
+    while(bx < W){
+      const bw = 30 + (bx*7 % 25);
+      const bh = 40 + (bx*13 % 90);
+      ctx.rect(bx, baseY - bh, bw, bh);
+      bx += bw + 6;
+    }
+    ctx.fill();
+  }
+
+  function drawGround(){
+    const g = ctx.createLinearGradient(0,H-GROUND_H,0,H);
+    g.addColorStop(0,'#3a1a55');
+    g.addColorStop(1,'#160822');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, H-GROUND_H, W, GROUND_H);
+    ctx.strokeStyle = 'rgba(124,92,255,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, H-GROUND_H);
+    ctx.lineTo(W, H-GROUND_H);
+    ctx.stroke();
+  }
+
+  function drawPipe(p){
+    const topH = p.gapY;
+    const botY = p.gapY + PIPE_GAP;
+    const botH = (H - GROUND_H) - botY;
+    const grad = ctx.createLinearGradient(p.x,0,p.x+PIPE_W,0);
+    grad.addColorStop(0, `hsl(${p.hue},85%,55%)`);
+    grad.addColorStop(1, `hsl(${p.hue+30},85%,40%)`);
+    ctx.fillStyle = grad;
+    ctx.shadowColor = `hsl(${p.hue},90%,60%)`;
+    ctx.shadowBlur = 14;
+    ctx.fillRect(p.x, 0, PIPE_W, topH);
+    ctx.fillRect(p.x, botY, PIPE_W, botH);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(p.x, topH-10, PIPE_W, 10);
+    ctx.fillRect(p.x, botY, PIPE_W, 10);
+  }
+
+  function drawBird(){
+    for(let i=0;i<bird.trail.length;i++){
+      const t = bird.trail[i];
+      const a = (i/bird.trail.length) * 0.35;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#5cd8ff';
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, bird.r*0.6, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for(const p of particles){
+      ctx.globalAlpha = Math.max(0,p.life/0.5) * 0.7;
+      ctx.fillStyle = '#ffb8f0';
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.save();
+    ctx.translate(bird.x, bird.y);
+    ctx.rotate(bird.rot);
+    const bg = ctx.createRadialGradient(-4,-4,2,0,0,bird.r+6);
+    bg.addColorStop(0,'#fff6b0');
+    bg.addColorStop(0.5,'#ff9f5c');
+    bg.addColorStop(1,'#ff5fd8');
+    ctx.shadowColor = '#ff9f5c';
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.arc(0,0,bird.r,0,Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // wing
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(-3, 2, 7, 4, Math.sin(elapsed*18)*0.6, 0, Math.PI*2);
+    ctx.fill();
+
+    // eye
+    ctx.fillStyle = '#1a0a2a';
+    ctx.beginPath();
+    ctx.arc(6,-4,2.4,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function draw(){
+    drawBackground();
+    for(const p of pipes) drawPipe(p);
+    drawGround();
+    drawBird();
+  }
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
