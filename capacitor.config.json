@@ -1,0 +1,9 @@
+{
+  "appId": "com.neonkusgames.neonkus",
+  "appName": "Neon Kuş",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false
+  }
+}
