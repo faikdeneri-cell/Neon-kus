@@ -14,6 +14,11 @@ workflows:
         script: npx cap add android || true
       - name: Sync Capacitor
         script: npx cap sync android
+      - name: Bump version code
+        script: |
+          cd android
+          sed -i '' "s/versionCode [0-9]*/versionCode $PROJECT_BUILD_NUMBER/" app/build.gradle
+          cd ..
       - name: Set up keystore
         script: |
           echo $CM_KEYSTORE | base64 --decode > /tmp/neonkus.keystore
@@ -48,4 +53,4 @@ workflows:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: alpha
-        submit_as_draft: true 
+        submit_as_draft: true
