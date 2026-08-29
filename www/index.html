@@ -32,6 +32,12 @@
   #best { font-size:13px; color:#b9a9ff; margin-top:2px; letter-spacing:1px; }
   #gameover { pointer-events:auto; }
   #gameover #tapBtn { margin-top:10px; }
+  #rewardBtn {
+    pointer-events:auto; margin-top:10px; padding:12px 28px; font-size:15px; font-weight:700; color:#fff;
+    background:linear-gradient(90deg,#ff5fd8,#ff9f5c); border:none; border-radius:999px; cursor:pointer;
+    box-shadow:0 0 20px rgba(255,95,216,0.5); display:none;
+  }
+  #rewardBtn.show { display:inline-block; }
   .stat { font-size:15px; margin:4px 0; color:#d8ccff; }
   .stat b { color:#fff; }
 </style>
@@ -44,6 +50,8 @@
     <div id="title">NEON KUŞ</div>
     <div id="sub">Ekrana dokun, engellerden kaç, puan topla</div>
     <button id="tapBtn">BAŞLA</button>
+    <br>
+    <button id="rewardBtn">🎬 İzle, devam et</button>
   </div>
 </div>
 
@@ -140,6 +148,7 @@
     subEl.innerHTML = 'Skor: <b>'+score+'</b> &nbsp;|&nbsp; En iyi: <b>'+best+'</b>';
     tapBtn.textContent = 'TEKRAR OYNA';
     overlay.classList.remove('hidden');
+    handleDeathAds();
   }
 
   tapBtn.addEventListener('click', (e)=>{
@@ -150,7 +159,7 @@
   });
 
   window.addEventListener('pointerdown', (e)=>{
-    if(e.target === tapBtn) return;
+    if(e.target === tapBtn || e.target === rewardBtn) return;
     flap();
   });
   window.addEventListener('keydown', (e)=>{
@@ -341,6 +350,95 @@
   }
 
   requestAnimationFrame(loop);
+
+  // ================= AdMob entegrasyonu =================
+  const rewardBtn = document.getElementById('rewardBtn');
+  const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const AdMob = isNative && window.Capacitor.Plugins ? window.Capacitor.Plugins.AdMob : null;
+
+  const AD_UNITS = {
+    banner: 'ca-app-pub-7193170172944115/4519839637',
+    interstitial: 'ca-app-pub-7193170172944115/5879249261',
+    rewarded: 'ca-app-pub-7193170172944115/8267512950'
+  };
+
+  let deathCount = 0;
+  let interstitialReady = false;
+  let rewardedReady = false;
+
+  async function initAds(){
+    if(!AdMob) return;
+    try{
+      await AdMob.initialize({ requestTrackingAuthorization: true, initializeForTesting: false });
+      await AdMob.showBanner({
+        adId: AD_UNITS.banner,
+        adSize: 'ADAPTIVE_BANNER',
+        position: 'BOTTOM_CENTER',
+        margin: 0
+      });
+    }catch(e){ /* banner yüklenemedi, sessizce geç */ }
+    prepareInterstitial();
+    prepareRewarded();
+  }
+
+  async function prepareInterstitial(){
+    if(!AdMob) return;
+    try{
+      await AdMob.prepareInterstitial({ adId: AD_UNITS.interstitial });
+      interstitialReady = true;
+    }catch(e){ interstitialReady = false; }
+  }
+
+  async function prepareRewarded(){
+    if(!AdMob) return;
+    try{
+      await AdMob.prepareRewardVideoAd({ adId: AD_UNITS.rewarded });
+      rewardedReady = true;
+      rewardBtn.classList.add('show');
+    }catch(e){ rewardedReady = false; rewardBtn.classList.remove('show'); }
+  }
+
+  async function handleDeathAds(){
+    deathCount++;
+    rewardBtn.classList.toggle('show', rewardedReady);
+    // Her 3 ölümde bir geçiş reklamı göster
+    if(AdMob && interstitialReady && deathCount % 3 === 0){
+      try{
+        await AdMob.showInterstitial();
+      }catch(e){}
+      interstitialReady = false;
+      prepareInterstitial();
+    }
+  }
+
+  rewardBtn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    if(!AdMob || !rewardedReady) return;
+    rewardBtn.disabled = true;
+    try{
+      await AdMob.showRewardVideoAd();
+      // Ödül kazanıldı: oyuncuyu kaldığı skordan devam ettir
+      reviveWithScore();
+    }catch(e){
+      // Reklam izlenmedi/iptal edildi, normal restart akışına bırak
+    }
+    rewardBtn.disabled = false;
+    rewardedReady = false;
+    rewardBtn.classList.remove('show');
+    prepareRewarded();
+  });
+
+  function reviveWithScore(){
+    const keptScore = score;
+    pipes = pipes.filter(p => p.x < W*0.15); // yakın engelleri temizle, güvenli alan aç
+    bird.x = W*0.3; bird.y = H*0.4; bird.vy = 0; bird.rot = 0; bird.trail = [];
+    score = keptScore;
+    scoreEl.textContent = String(score);
+    state = 'playing';
+    overlay.classList.add('hidden');
+  }
+
+  initAds();
 })();
 </script>
 </body>
