@@ -14,6 +14,10 @@ workflows:
         script: npx cap add android || true
       - name: Sync Capacitor
         script: npx cap sync android
+      - name: Bump target SDK
+        script: |
+          sed -i '' 's/targetSdkVersion = [0-9]*/targetSdkVersion = 35/' android/variables.gradle
+          sed -i '' 's/compileSdkVersion = [0-9]*/compileSdkVersion = 35/' android/variables.gradle
       - name: Bump version code
         script: |
           cd android
