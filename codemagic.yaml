@@ -16,7 +16,7 @@ workflows:
         script: npx cap sync android
       - name: Ensure AdMob App ID in manifest
         script: |
-          sed -i '' '/<application/a\
+          sed -i '' '/<\/application>/i\
               <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-7193170172944115~7921747220"/>
           ' android/app/src/main/AndroidManifest.xml
       - name: Bump target SDK
