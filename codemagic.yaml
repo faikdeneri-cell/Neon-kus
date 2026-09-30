@@ -12,8 +12,12 @@ workflows:
         script: npm install
       - name: Add Android platform
         script: npx cap add android || true
-          sed -i 's#</application>#<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-7193170172944115~7921747220"/></application>#' android/app/src/main/AndroidManifest.xml
-      - name: Sync Capacitor
+      - name: Add AdMob App ID to manifest
+        script: |
+          if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" android/app/src/main/AndroidManifest.xml; then
+            sed -i '' 's#</application>#<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-7193170172944115~7921747220"/></application>#' android/app/src/main/AndroidManifest.xml
+          fi
+          grep "APPLICATION_ID" android/app/src/main/AndroidManifest.xml - name: Sync Capacitor
         script: npx cap sync android
       - name: Bump target SDK
         script: |
