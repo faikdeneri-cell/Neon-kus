@@ -17,7 +17,8 @@ workflows:
           if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" android/app/src/main/AndroidManifest.xml; then
             sed -i '' 's#</application>#<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-7193170172944115~7921747220"/></application>#' android/app/src/main/AndroidManifest.xml
           fi
-          grep "APPLICATION_ID" android/app/src/main/AndroidManifest.xml - name: Sync Capacitor
+          grep "APPLICATION_ID" android/app/src/main/AndroidManifest.xml
+      - name: Sync Capacitor
         script: npx cap sync android
       - name: Bump SDK versions
         script: |
