@@ -12,6 +12,11 @@ workflows:
         script: npm install
       - name: Add Android platform
         script: npx cap add android || true
+      - name: Neon Kuş ikonlarını oluştur
+        script: |
+          npm install @capacitor/assets --save-dev
+          npx capacitor-assets generate --android --iconBackgroundColor '#0a0a1f' --iconBackgroundColorDark '#0a0a1f'
+          ls android/app/src/main/res | grep -i mipmap
       - name: Add AdMob App ID to manifest
         script: |
           if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" android/app/src/main/AndroidManifest.xml; then
